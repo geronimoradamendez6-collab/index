@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulador arquitectónico 3D</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap">
+<style>
+:root{--bg:#E8EDEE;--panel:#F6F8F8;--ink:#1B2A33;--mute:#5B6B74;--line:#C5CFD3;--acc:#1F6F78;--warm:#B5741A;--bad:#B3261E;--ok:#2E7D4F}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#12191D;--panel:#1A242A;--ink:#E4ECEE;--mute:#8FA0A8;--line:#2E3C44;--acc:#4FB3BF;--warm:#E0A64A;--bad:#FF8A80;--ok:#7BD39C}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 'Bricolage Grotesque',system-ui,sans-serif;font-variant-numeric:tabular-nums}
+#app{display:grid;grid-template-columns:310px 1fr 330px;height:100%}
+aside{background:var(--panel);overflow-y:auto;padding:16px;border-right:1px solid var(--line)}
+aside.r{border:0;border-left:1px solid var(--line)}
+h1{font-size:20px;font-weight:800;margin:0 0 2px}
+h2{font-size:14px;font-weight:600;margin:16px 0 6px;padding-top:12px;border-top:1px solid var(--line)}
+.s{color:var(--mute);font-size:12.5px;margin:0 0 4px}
+label{display:flex;justify-content:space-between;font-size:13px;margin-top:8px}
+label b{font-weight:600}
+input[type=range]{width:100%;accent-color:var(--acc)}
+select,button{font:inherit;width:100%;padding:7px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);cursor:pointer}
+:focus-visible{outline:2px solid var(--acc)}
+.tabs,.bar{display:flex;gap:4px;flex-wrap:wrap}
+.tabs button,.bar button{width:auto;padding:5px 10px}
+.on{background:var(--acc)!important;color:#fff!important;border-color:var(--acc)!important}
+#view{position:relative;min-height:0;overflow:hidden}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.bar{position:absolute;top:10px;left:10px}
+.hint{position:absolute;left:12px;bottom:10px;font-size:12px;color:var(--mute)}
+.dim{position:absolute;transform:translate(-50%,-50%);background:var(--warm);color:#fff;font-size:12px;font-weight:600;padding:1px 6px;border-radius:4px;pointer-events:none;white-space:nowrap}
+.big{font-size:28px;font-weight:800;color:var(--acc);line-height:1.1}
+.row{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--line);font-size:13px}
+.row span:last-child{font-weight:600;text-align:right}
+code{display:block;background:var(--bg);padding:5px 8px;border-radius:6px;font:12px/1.4 monospace;margin:5px 0;overflow-x:auto}
+#q{width:100%;height:120px;background:var(--bg);border-radius:6px}
+#warn{font-weight:600;margin:6px 0}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+td,th{padding:3px 4px;border-bottom:1px solid var(--line);text-align:right}
+th:first-child,td:first-child{text-align:left}
+@media(max-width:950px){
+ #app{grid-template-columns:1fr;height:auto}
+ #view{order:-1;height:60vh;min-height:350px}
+ aside{border:0;border-bottom:1px solid var(--line)}
+ aside.r{border:0}
+}
+</style>
+</head>
+<body>
+<div id="app">
+<aside>
+<h1>Simulador arquitectónico</h1>
+<p class="s">Modifica el proyecto: el modelo 3D y las métricas se recalculan al instante.</p>
+
+<h2>Edificio</h2>
+<label>Número de pisos <b id="vN"></b></label>
+<input type="range" id="N" min="1" max="8" value="4">
+
+<label>Largo base (m) <b id="vL"></b></label>
+<input type="range" id="L" min="6" max="30" step="0.1" value="18">
+
+<label>Ancho base (m) <b id="vW"></b></label>
+<input type="range" id="W" min="6" max="24" step="0.1" value="12">
+
+<label>Entrepiso base (m) <b id="vH"></b></label>
+<input type="range" id="H" min="2.4" max="4.5" step="0.05" value="3">
+
+<label>Material de fachada</label>
+<select id="M"></select>
+
+<label>Ventanas en fachada (%) <b id="vG"></b></label>
+<input type="range" id="G" min="10" max="90" step="1" value="35">
+
+<h2>Piso seleccionado</h2>
+<div class="tabs" id="tabs"></div>
+
+<label>Uso</label>
+<select id="U"></select>
+
+<label>Largo (m) <b id="vFL"></b></label>
+<input type="range" id="FL" min="4" max="30" step="0.1">
+
+<label>Ancho (m) <b id="vFW"></b></label>
+<input type="range" id="FW" min="4" max="24" step="0.1">
+
+<label>Entrepiso (m) <b id="vFH"></b></label>
+<input type="range" id="FH" min="2.4" max="5" step="0.05">
+
+<button id="rst" style="margin-top:8px">Igualar pisos a la base</button>
+
+<h2>Fachada y entorno</h2>
+<label>Fachada</label>
+<select id="FA">
+<option>Lisa</option>
+<option>Retícula</option>
+<option>Lamas</option>
+<option>Balcones</option>
+</select>
+
+<label>Árboles <b id="vTR"></b></label>
+<input type="range" id="TR" min="0" max="60" value="18">
+
+<label>Altura de árboles (m) <b id="vTH"></b></label>
+<input type="range" id="TH" min="4" max="14" value="8">
+
+<label>Relieve del terreno (m) <b id="vRE"></b></label>
+<input type="range" id="RE" min="0" max="10" step="0.5" value="4">
+
+<label>Peatones en el exterior <b id="vPE"></b></label>
+<input type="range" id="PE" min="0" max="20" value="8">
+
+<h2>Costos y clima</h2>
+<label>Costo fijo por piso (M COP) <b id="vF"></b></label>
+<input type="range" id="F" min="0" max="150" step="5" value="50">
+
+<label>Diferencia de temperatura (°C) <b id="vD"></b></label>
+<input type="range" id="D" min="2" max="20" step="1" value="10">
+
+<label>Hora del sol <b id="vT"></b></label>
+<input type="range" id="T" min="6" max="18" step="0.25" value="15">
+</aside>
+
+<div id="view">
+<canvas id="c"></canvas>
+<div class="bar">
+<button id="bEx">Explosionar pisos</button>
+<button id="bDi" class="on">Cotas</button>
+<button id="bPe" class="on">Personas</button>
+</div>
+<div class="dim" id="d1"></div>
+<div class="dim" id="d2"></div>
+<div class="dim" id="d3"></div>
+<div class="hint">Arrastra para girar · rueda o pellizco para acercar</div>
+</div>
+
+<aside class="r">
+<div class="s">Costo estimado total</div>
+<div class="big" id="kCost"></div>
+<div class="row"><span>Área construida</span><span id="kA"></span></div>
+<div class="row"><span>Volumen</span><span id="kV"></span></div>
+<div class="row"><span>Altura total</span><span id="kT"></span></div>
+<div class="row"><span>Fachada (área)</span><span id="kE"></span></div>
+<div class="row"><span>Pérdida térmica</span><span id="kQ"></span></div>
+<div class="row"><span>Costo por m²</span><span id="kM"></span></div>
+<div id="perFloor"></div>
+
+<code>Volumen = Largo × Ancho × Altura</code>
+<code>Costo = Área × Valor_m² × f_uso + Costos_fijos</code>
+<code>Q = Σ Área_fachada × U_eq × ΔT</code>
+
+<h2>Lote y normativa (ecuación cuadrática)</h2>
+<p class="s">Lote con semiperímetro b; un lado mide x y el otro b − x.</p>
+
+<label>Semiperímetro b (m) <b id="vB"></b></label>
+<input type="range" id="B" min="20" max="90" step="0.5" value="50">
+
+<label>Lado x (m) <b id="vX"></b></label>
+<input type="range" id="X" min="0" max="45" step="0.1" value="22">
+
+<label>Retiro perimetral (m) <b id="vR"></b></label>
+<input type="range" id="R" min="0" max="6" step="0.5" value="3">
+
+<code id="eq"></code>
+<canvas id="q"></canvas>
+
+<div class="row"><span>Área del lote</span><span id="kLot"></span></div>
+<div class="row"><span>Máximo (x = b/2)</span><span id="kMax"></span></div>
+<div class="row"><span>Ocupación (huella / lote)</span><span id="kOc"></span></div>
+<div class="row"><span>Índice de construcción</span><span id="kIc"></span></div>
+<div class="row"><span>Aforo estimado</span><span id="kAf"></span></div>
+<div class="row"><span>Arborización</span><span id="kCa"></span></div>
+<div class="row"><span>Área libre del lote</span><span id="kLi"></span></div>
+<div id="warn"></div>
+
+<h2>Escenarios</h2>
+<div class="bar" style="position:static">
+<button id="sv">Guardar como referencia</button>
+<button id="ex">Exportar JSON</button>
+</div>
+<table id="cmp" style="margin-top:6px"></table>
+</aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+
+const MAT={
+ Concreto:{c:0xB9BFC2,m2:2800000,U:2.0},
+ Ladrillo:{c:0xB5623F,m2:2400000,U:1.3},
+ Madera:{c:0xC79A5E,m2:2600000,U:0.6},
+ 'Panel metálico':{c:0x8FA3AD,m2:3000000,U:1.1}
+};
+
+const USO={
+ Vivienda:{f:1,a:15,c:0xE9E2D3},
+ Oficina:{f:1.1,a:10,c:0xDDE6EA},
+ Comercio:{f:0.95,a:4,c:0xEADCC3}
+};
+
+const UG=2.8,GLASS_M2=3.6e6;
+const S={sel:0,ex:false,dim:true,ref:null,pe:true,trees:0,floors:[]};
+const fmt=(n,d=1)=>n.toLocaleString('es-CO',{minimumFractionDigits:d,maximumFractionDigits:d});
+const cop=n=>'$ '+Math.round(n/1e6).toLocaleString('es-CO')+' M';
+
+Object.keys(MAT).forEach(k=>$('M').add(new Option(k,k)));
+Object.keys(USO).forEach(k=>$('U').add(new Option(k,k)));
+
+/* MOTOR 3D */
+const cv=$('c');
+const R=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+R.setPixelRatio(Math.min(devicePixelRatio,2));
+R.shadowMap.enabled=true;
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0xDCE7EB);
+scene.fog=new THREE.Fog(0xDCE7EB,100,260);
+
+const cam=new THREE.PerspectiveCamera(45,1,0.1,600);
+
+scene.add(new THREE.HemisphereLight(0xffffff,0x778899,0.75));
+
+const sun=new THREE.DirectionalLight(0xfff2dd,0.9);
+sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-60,right:60,top:60,bottom:-60,near:1,far:250});
+scene.add(sun);
+
+const people=new THREE.Group();
+scene.add(people);
+const walkers=[];
+let path={hx:10,hz:10};
+
+const PG={
+ leg:new THREE.CylinderGeometry(0.07,0.06,0.8,8),
+ torso:new THREE.BoxGeometry(0.42,0.6,0.24),
+ head:new THREE.SphereGeometry(0.11,12,10)
+};
+
+const PM=[0x2F5D8A,0xB5483A,0x3E7C59,0xD0A03A,0x6B4E8A,0x444B52]
+ .map(c=>new THREE.MeshStandardMaterial({color:c,roughness:.8}));
+
+const SK=[0xF1C6A0,0xC68E63,0x8D5A3B]
+ .map(c=>new THREE.MeshStandardMaterial({color:c}));
+
+const DK=new THREE.MeshStandardMaterial({color:0x2B3238});
+
+function person(rd){
+ const g=new THREE.Group(),c=PM[rd()*PM.length|0],k=SK[rd()*3|0];
+ const mk=(geo,mat,x,y,z,par)=>{
+  const m=new THREE.Mesh(geo,mat);
+  m.position.set(x,y,z);
+  m.castShadow=true;
+  (par||g).add(m);
+ };
+ g.userData.legs=[-0.1,0.1].map(x=>{
+  const p=new THREE.Group();
+  p.position.set(x,0.8,0);
+  mk(PG.leg,DK,0,-0.4,0,p);
+  g.add(p);
+  return p;
+ });
+ mk(PG.torso,c,0,1.1,0);
+ mk(PG.head,k,0,1.52,0);
+ g.scale.setScalar(0.95+rd()*0.15);
+ return g;
+}
+
+function pp(s){
+ const{hx,hz}=path;
+ let u=(((s%1)+1)%1)*4*(hx+hz);
+ if(u<2*hx)return[-hx+u,-hz];
+ u-=2*hx;
+ if(u<2*hz)return[hx,-hz+u];
+ u-=2*hz;
+ if(u<2*hx)return[hx-u,hz];
+ u-=2*hx;
+ return[-hx,hz-u];
+}
+
+const rnd=s=>()=>{
+ s|=0;
+ s=s+0x6D2B79F5|0;
+ let t=Math.imul(s^s>>>15,1|s);
+ t=t+Math.imul(t^t>>>7,61|t)^t;
+ return((t^t>>>14)>>>0)/4294967296;
+};
+
+const group=new THREE.Group();
+scene.add(group);
+
+let th=0.8,ph=1.05,dist=55;
+const totalH=()=>S.floors.reduce((a,f)=>a+f.H,0);
+const yOf=i=>S.floors.slice(0,i).reduce((a,f)=>a+f.H+(S.ex?1.5:0),0);
+const UB=new THREE.BoxGeometry(1,1,1);
+
+const TG={
+ trunk:new THREE.CylinderGeometry(1,1,1,6),
+ crown:new THREE.SphereGeometry(1,10,8),
+ cone:new THREE.ConeGeometry(1,1,8)
+};
+
+const TM={
+ trunk:new THREE.MeshStandardMaterial({color:0x6B4A2F}),
+ g:[0x3F7D4A,0x5E9A52,0x2F6B47].map(c=>new THREE.MeshStandardMaterial({color:c,roughness:.9}))
+};
+
+function add(g,mat,x,y,z,sh=true,sc){
+ const m=new THREE.Mesh(g,mat);
+ m.position.set(x,y,z);
+ if(sc)m.scale.set(...sc);
+ m.castShadow=sh;
+ m.receiveShadow=true;
+ group.add(m);
+ return m;
+}
+
+const box=(w,h,d,mat,x,y,z,sh=true)=>add(UB,mat,x,y,z,sh,[w,h,d]);
+
+function build(){
+ group.children.slice().forEach(o=>{
+  group.remove(o);
+ });
+ people.clear();
+ walkers.length=0;
+
+ const m=MAT[$('M').value];
+ const gl=+$('G').value/100;
+ const lot=lotDims();
+ const fa=$('FA').value;
+ const rd=rnd(7);
+
+ const wm=new THREE.MeshStandardMaterial({color:m.c,roughness:0.85});
+ const wmS=new THREE.MeshStandardMaterial({
+  color:m.c,roughness:0.85,
+  emissive:0xC8892B,emissiveIntensity:0.3
+ });
+ const glassM=new THREE.MeshStandardMaterial({
+  color:0x7FC4D4,transparent:true,opacity:0.55,
+  metalness:0.6,roughness:0.15
+ });
+
+ const slabM={};
+ Object.keys(USO).forEach(k=>slabM[k]=new THREE.MeshStandardMaterial({color:USO[k].c}));
+
+ /* Terreno */
+ const amp=+$('RE').value,seg=90;
+ const tg=new THREE.PlaneGeometry(220,220,seg,seg);
+ tg.rotateX(-Math.PI/2);
+
+ const pos=tg.attributes.position;
+ const col=new Float32Array(pos.count*3);
+ const cA=new THREE.Color(0x8DB27A);
+ const cB=new THREE.Color(0x6F8F5E);
+ const cC=new THREE.Color(0xA89572);
+ const tc=new THREE.Color();
+
+ for(let i=0;i<pos.count;i++){
+  const x=pos.getX(i),z=pos.getZ(i);
+  const d=Math.hypot(
+   Math.max(Math.abs(x)-lot.L/2-10,0),
+   Math.max(Math.abs(z)-lot.W/2-10,0)
+  );
+  const t=Math.min(d/30,1);
+  const sm=t*t*(3-2*t);
+  const n=0.55+0.3*Math.sin(x*.07+1.3)*Math.cos(z*.06)+0.15*Math.sin(x*.19+z*.13);
+  const h=amp*sm*n*1.6;
+  pos.setY(i,h-0.06);
+  tc.copy(cA).lerp(h>amp*0.9?cC:cB,Math.min(h/(amp+0.01),1));
+  col.set([tc.r,tc.g,tc.b],i*3);
+ }
+
+ tg.setAttribute('color',new THREE.BufferAttribute(col,3));
+ tg.computeVertexNormals();
+
+ const tm=new THREE.Mesh(tg,new THREE.MeshStandardMaterial({
+  vertexColors:true,roughness:1,flatShading:true
+ }));
+ tm.receiveShadow=true;
+ group.add(tm);
+
+ const lg=new THREE.PlaneGeometry(lot.L,lot.W);
+ const lm=new THREE.Mesh(lg,new THREE.MeshBasicMaterial({
+  color:0x6E9B6B,transparent:true,opacity:0.3
+ }));
+ lm.rotation.x=-Math.PI/2;
+ lm.position.y=0.02;
+ group.add(lm);
+
+ const ed=new THREE.LineSegments(
+  new THREE.EdgesGeometry(lg),
+  new THREE.LineBasicMaterial({color:0x2E7D4F})
+ );
+ ed.rotation.x=-Math.PI/2;
+ ed.position.y=0.03;
+ group.add(ed);
+
+ /* Pisos y fachadas */
+ S.floors.forEach((f,i)=>{
+  const y=yOf(i),yb=y+0.25,avail=f.H-0.25;
+  const gh=avail*(0.15+0.75*gl);
+  const sill=(avail-gh)*0.45;
+  const head=avail-gh-sill;
+  const wmi=i===S.sel?wmS:wm;
+  const gy=yb+sill+gh/2;
+
+  box(f.L+0.6,0.25,f.W+0.6,slabM[f.u],0,y+0.125,0);
+  box(f.L,sill,f.W,wmi,0,yb+sill/2,0);
+  box(f.L+0.04,gh,f.W+0.04,glassM,0,gy,0,false);
+  box(f.L,head,f.W,wmi,0,yb+sill+gh+head/2,0);
+
+  const sides=[
+   [f.L,f.W/2,0,1],
+   [f.L,f.W/2,0,-1],
+   [f.W,f.L/2,1,0],
+   [f.W,f.L/2,-1,0]
+  ];
+
+  if(fa==='Retícula'){
+   sides.forEach(([len,off,nx,nz])=>{
+    const n=Math.max(2,Math.round(len/2.4));
+    for(let j=0;j<=n;j++){
+     const p=-len/2+len*j/n;
+     if(nz)box(0.16,gh+0.1,0.22,wmi,p,gy,nz*(off+0.04));
+     else box(0.22,gh+0.1,0.16,wmi,nx*(off+0.04),gy,p);
+    }
+   });
+  }
+
+  if(fa==='Lamas'){
+   sides.slice(0,2).forEach(([len,off,nx,nz])=>{
+    const n=Math.floor(len/0.9);
+    for(let j=0;j<=n;j++){
+     box(0.07,gh+0.5,0.5,wmi,-len/2+len*j/n,gy,nz*(off+0.4));
+    }
+   });
+  }
+
+  if(fa==='Balcones'){
+   box(f.L*0.7,0.15,1.4,slabM[f.u],0,y+0.18,f.W/2+0.7);
+   box(f.L*0.7,1,0.04,glassM,0,y+0.75,f.W/2+1.38,false);
+  }
+ });
+
+ const t=S.floors.length-1,ft=S.floors[t];
+ box(ft.L+0.6,0.3,ft.W+0.6,
+  new THREE.MeshStandardMaterial({color:0x555F66}),
+  0,yOf(t)+ft.H,0
+ );
+
+ /* Árboles */
+ const fp=S.floors.reduce((a,f)=>({
+  L:Math.max(a.L,f.L),W:Math.max(a.W,f.W)
+ }),{L:0,W:0});
+
+ const nT=+$('TR').value,tH=+$('TH').value;
+ let placed=0;
+
+ for(let tr=0;placed<nT&&tr<nT*40;tr++){
+  const x=(rd()-.5)*(lot.L-1);
+  const z=(rd()-.5)*(lot.W-1);
+  if(Math.abs(x)<fp.L/2+1.5&&Math.abs(z)<fp.W/2+1.5)continue;
+  placed++;
+
+  const h=tH*(0.7+rd()*0.6),gm=TM.g[rd()*3|0];
+  add(TG.trunk,TM.trunk,x,h*0.2,z,true,[h*0.03,h*0.4,h*0.03]);
+
+  if(rd()<0.5){
+   const r=h*0.3;
+   add(TG.crown,gm,x,h*0.4+r*0.7,z,true,[r,r*0.85,r]);
+  }else{
+   add(TG.cone,gm,x,h*0.25+h*0.375,z,true,[h*0.22,h*0.75,h*0.22]);
+  }
+ }
+
+ S.trees=placed;
+
+ /* Personas */
+ if(S.pe){
+  S.floors.forEach((f,i)=>{
+   const n=Math.min(8,Math.ceil(f.L*f.W/USO[f.u].a/6));
+   for(let k=0;k<n;k++){
+    const p=person(rd);
+    p.position.set(
+     (rd()-.5)*(f.L-2),
+     yOf(i)+0.25,
+     (rd()-.5)*(f.W-2)
+    );
+    p.rotation.y=rd()*6.28;
+    people.add(p);
+   }
+  });
+
+  path={
+   hx:Math.max((fp.L/2+lot.L/2)/2,fp.L/2+0.6),
+   hz:Math.max((fp.W/2+lot.W/2)/2,fp.W/2+0.6)
+  };
+
+  const np=+$('PE').value;
+  for(let k=0;k<np;k++){
+   const p=person(rd);
+   people.add(p);
+   walkers.push({g:p,s:k/np+rd()*0.02});
+  }
+ }
+
+ dist=Math.max(45,totalH()*2.2,lot.L*1.3);
+}
+
+function lotDims(){
+ const b=+$('B').value,x=+$('X').value;
+ return{L:Math.max(b-x,0.1),W:Math.max(x,0.1)};
+}
+
+function resize(){
+ const r=$('view').getBoundingClientRect();
+ R.setSize(r.width,r.height,false);
+ cam.aspect=r.width/r.height;
+ cam.updateProjectionMatrix();
+}
+
+function label(el,v,txt){
+ const p=v.clone().project(cam);
+ const r=$('view').getBoundingClientRect();
+ el.style.display=S.dim&&p.z<1?'block':'none';
+ el.style.left=(p.x+1)/2*r.width+'px';
+ el.style.top=(1-p.y)/2*r.height+'px';
+ el.textContent=txt;
+}
+
+function draw(){
+ const top=(totalH()+(S.ex?1.5*S.floors.length:0))/2;
+
+ cam.position.set(
+  dist*Math.sin(ph)*Math.cos(th),
+  top+dist*Math.cos(ph),
+  dist*Math.sin(ph)*Math.sin(th)
+ );
+ cam.lookAt(0,top,0);
+
+ const h=+$('T').value,a=(h-6)/12*Math.PI;
+ sun.position.set(Math.cos(a)*70,Math.sin(a)*70+5,25);
+
+ const f=S.floors[S.sel],y=yOf(S.sel);
+ label($('d1'),new THREE.Vector3(0,y,f.W/2+1),fmt(f.L,2)+' m');
+ label($('d2'),new THREE.Vector3(f.L/2+1,y,0),fmt(f.W,2)+' m');
+ label($('d3'),new THREE.Vector3(-f.L/2,y+f.H/2,f.W/2),fmt(f.H,2)+' m');
+
+ const now=performance.now()/1000;
+ const dt=Math.min(now-(draw.t||now),0.1);
+ draw.t=now;
+
+ walkers.forEach(w=>{
+  w.s+=1.3*dt/(4*(path.hx+path.hz));
+  const[x,z]=pp(w.s),[x2,z2]=pp(w.s+0.002);
+  const a=Math.sin(now*6+w.s*50)*0.5;
+  w.g.position.set(x,0,z);
+  w.g.rotation.y=Math.atan2(x2-x,z2-z);
+  w.g.userData.legs[0].rotation.x=a;
+  w.g.userData.legs[1].rotation.x=-a;
+ });
+
+ R.render(scene,cam);
+ requestAnimationFrame(draw);
+}
+
+/* Controles de cámara */
+const pts=new Map();
+let pd=0,last=null;
+
+cv.addEventListener('pointerdown',e=>{
+ cv.setPointerCapture(e.pointerId);
+ pts.set(e.pointerId,e);
+ last=e;
+});
+
+cv.addEventListener('pointermove',e=>{
+ if(!pts.has(e.pointerId))return;
+ pts.set(e.pointerId,e);
+
+ if(pts.size===2){
+  const[a,b]=[...pts.values()];
+  const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+  if(pd)dist=Math.min(200,Math.max(12,dist*pd/d));
+  pd=d;
+  return;
+ }
+
+ th-=(e.clientX-last.clientX)*0.008;
+ ph=Math.min(1.5,Math.max(0.15,ph-(e.clientY-last.clientY)*0.008));
+ last=e;
+});
+
+const up=e=>{
+ pts.delete(e.pointerId);
+ pd=0;
+ last=[...pts.values()][0]||null;
+};
+
+cv.addEventListener('pointerup',up);
+cv.addEventListener('pointercancel',up);
+
+cv.addEventListener('wheel',e=>{
+ e.preventDefault();
+ dist=Math.min(200,Math.max(12,dist*(1+e.deltaY*0.001)));
+},{passive:false});
+
+addEventListener('resize',resize);
+
+/* Cálculos arquitectónicos */
+let cur={};
+
+function calc(){
+ const m=MAT[$('M').value];
+ const gl=+$('G').value/100;
+ const fix=+$('F').value*1e6;
+ const dT=+$('D').value;
+ const lot=lotDims();
+ const r=+$('R').value;
+
+ let A=0,E=0,V=0,cost=0,Q=0,rows='',maxA=0,fits=true;
+
+ const Ueq=(1-gl)*m.U+gl*UG;
+ const vm2=m.m2*(1-gl)+GLASS_M2*gl;
+
+ S.floors.forEach((f,i)=>{
+  const a=f.L*f.W;
+  const fac=2*(f.L+f.W)*f.H;
+  const c=a*vm2*USO[f.u].f+fix;
+
+  A+=a;
+  E+=fac;
+  V+=a*f.H;
+  cost+=c;
+  Q+=fac*Ueq*dT;
+  maxA=Math.max(maxA,a);
+
+  if(f.L>lot.L-2*r||f.W>lot.W-2*r)fits=false;
+
+  rows+=`<div class="row"><span>Piso ${i+1} · ${f.u} · ${fmt(a)} m²</span><span>${cop(c)}</span></div>`;
+ });
+
+ const lotA=lot.L*lot.W,b=+$('B').value;
+
+ cur={
+  costo:cost,
+  area:A,
+  volumen:V,
+  perdida_kW:Q/1000,
+  ocupacion:maxA/lotA,
+  indice_construccion:A/lotA
+ };
+
+ $('kCost').textContent=cop(cost);
+ $('kA').textContent=fmt(A)+' m²';
+ $('kV').textContent=fmt(V,0)+' m³';
+ $('kT').textContent=fmt(totalH(),2)+' m';
+ $('kE').textContent=fmt(E)+' m²';
+ $('kQ').textContent=fmt(Q/1000)+' kW';
+ $('kM').textContent='$ '+fmt(cost/A/1e6,2)+' M/m²';
+
+ $('perFloor').innerHTML='<h2>Por piso</h2>'+rows;
+
+ $('eq').textContent=`Área = x(b − x) = −x² + ${fmt(b)}x = ${fmt(lotA)} m²`;
+ $('kLot').textContent=fmt(lotA)+' m²';
+ $('kMax').textContent=fmt(b*b/4)+' m²';
+ $('kOc').textContent=fmt(cur.ocupacion*100)+' %';
+ $('kIc').textContent=fmt(cur.indice_construccion,2);
+
+ const aforo=S.floors.reduce((a,f)=>a+f.L*f.W/USO[f.u].a,0);
+ const canopy=S.trees*Math.PI*Math.pow(0.35*(+$('TH').value),2);
+
+ cur.aforo=aforo;
+ cur.cobertura_arborea=canopy;
+ cur.area_libre=lotA-maxA;
+
+ $('kAf').textContent=Math.round(aforo)+' personas';
+ $('kCa').textContent=S.trees+' árboles · '+fmt(canopy,0)+' m²';
+ $('kLi').textContent=fmt(lotA-maxA)+' m²';
+
+ $('warn').className=fits?'ok':'bad';
+ $('warn').textContent=fits
+  ?'El edificio cabe dentro del lote con el retiro indicado.'
+  :'Algún piso invade el retiro o sale del lote. Reduce sus medidas o agranda el lote.';
+
+ curve();
+ cmp();
+}
+
+function curve(){
+ const b=+$('B').value,x=+$('X').value;
+ const best=b*b/4,c=$('q');
+ const w=c.width=c.clientWidth*2,hh=c.height=240;
+ const g=c.getContext('2d');
+ const st=getComputedStyle(document.body);
+
+ g.clearRect(0,0,w,hh);
+ g.strokeStyle=st.getPropertyValue('--acc');
+ g.lineWidth=3;
+ g.beginPath();
+
+ for(let i=0;i<=100;i++){
+  const xx=b*i/100;
+  const px=10+(w-20)*i/100;
+  const py=hh-12-(hh-28)*(xx*(b-xx))/best;
+  i?g.lineTo(px,py):g.moveTo(px,py);
+ }
+
+ g.stroke();
+ g.fillStyle=st.getPropertyValue('--warm');
+ g.beginPath();
+ g.arc(
+  10+(w-20)*x/b,
+  hh-12-(hh-28)*(x*(b-x))/best,
+  8,0,7
+ );
+ g.fill();
+}
+
+function cmp(){
+ const rows=[
+  ['Costo',k=>cop(k.costo)],
+  ['Área',k=>fmt(k.area)+' m²'],
+  ['Volumen',k=>fmt(k.volumen,0)+' m³'],
+  ['Pérdida',k=>fmt(k.perdida_kW)+' kW'],
+  ['Ocupación',k=>fmt(k.ocupacion*100)+' %'],
+  ['Ind. constr.',k=>fmt(k.indice_construccion,2)],
+  ['Aforo',k=>Math.round(k.aforo)+' pers.']
+ ];
+
+ $('cmp').innerHTML=S.ref
+  ?'<tr><th></th><th>Referencia</th><th>Actual</th></tr>'+
+   rows.map(([n,f])=>`<tr><td>${n}</td><td>${f(S.ref)}</td><td>${f(cur)}</td></tr>`).join('')
+  :'<tr><td class="s">Guarda una referencia para comparar cambios.</td></tr>';
+}
+
+/* Interfaz */
+const lab=()=>{
+ [
+  ['N',0],['L',1],['W',1],['H',2],['G',0],['F',0],
+  ['D',0],['T',2],['B',1],['X',1],['R',1],
+  ['TR',0],['TH',0],['RE',1],['PE',0]
+ ].forEach(([k,d])=>$('v'+k).textContent=fmt(+$ (k).value,d));
+};
+
+function sync(){
+ const b=+$('B').value;
+ $('X').max=b;
+ if(+$('X').value>b)$('X').value=b;
+
+ lab();
+ $('tabs').innerHTML='';
+
+ S.floors.forEach((f,i)=>{
+  const t=document.createElement('button');
+  t.textContent='P'+(i+1);
+  t.className=i===S.sel?'on':'';
+  t.onclick=()=>{
+   S.sel=i;
+   sync();
+  };
+  $('tabs').appendChild(t);
+ });
+
+ const f=S.floors[S.sel];
+ $('FL').value=f.L;
+ $('FW').value=f.W;
+ $('FH').value=f.H;
+ $('U').value=f.u;
+
+ $('vFL').textContent=fmt(f.L);
+ $('vFW').textContent=fmt(f.W);
+ $('vFH').textContent=fmt(f.H,2);
+
+ build();
+ calc();
+}
+
+function fit(){
+ const n=+$('N').value;
+
+ while(S.floors.length<n){
+  S.floors.push({
+   L:+$('L').value,
+   W:+$('W').value,
+   H:+$('H').value,
+   u:'Vivienda'
+  });
+ }
+
+ S.floors.length=n;
+ S.sel=Math.min(S.sel,n-1);
+}
+
+$('N').oninput=()=>{
+ fit();
+ sync();
+};
+
+['L','W','H'].forEach(k=>{
+ $(k).oninput=()=>{
+  S.floors.forEach(f=>f[k]=+$(k).value);
+  sync();
+ };
+});
+
+['M','G','F','D','B','X','R','FA','TR','TH','RE','PE']
+ .forEach(k=>$(k).oninput=sync);
+
+$('T').oninput=lab;
+
+$('FL').oninput=()=>{
+ S.floors[S.sel].L=+$('FL').value;
+ sync();
+};
+
+$('FW').oninput=()=>{
+ S.floors[S.sel].W=+$('FW').value;
+ sync();
+};
+
+$('FH').oninput=()=>{
+ S.floors[S.sel].H=+$('FH').value;
+ sync();
+};
+
+$('U').onchange=()=>{
+ S.floors[S.sel].u=$('U').value;
+ sync();
+};
+
+$('rst').onclick=()=>{
+ S.floors.forEach(f=>{
+  f.L=+$('L').value;
+  f.W=+$('W').value;
+  f.H=+$('H').value;
+ });
+ sync();
+};
+
+$('bEx').onclick=e=>{
+ S.ex=!S.ex;
+ e.target.classList.toggle('on',S.ex);
+ build();
+};
+
+$('bDi').onclick=e=>{
+ S.dim=!S.dim;
+ e.target.classList.toggle('on',S.dim);
+};
+
+$('bPe').onclick=e=>{
+ S.pe=!S.pe;
+ e.target.classList.toggle('on',S.pe);
+ build();
+};
+
+$('sv').onclick=()=>{
+ S.ref={...cur};
+ cmp();
+};
+
+$('ex').onclick=()=>{
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(
+  new Blob(
+   [JSON.stringify({pisos:S.floors,metricas:cur},null,2)],
+   {type:'application/json'}
+  )
+ );
+ a.download='escenario.json';
+ a.click();
+};
+
+fit();
+sync();
+resize();
+draw();
+</script>
+</body>
+</html>
